@@ -6,10 +6,10 @@ ConnectionStatus::ConnectionStatus(const Infos & infos) : infos(infos) {
 
 void ConnectionStatus::init_all()
 {
-	user_video_from_where.clear();
-	user_video_from_where.resize(infos.num_user);
-	for (auto& r : infos.reqs)
-		user_video_from_where[r.user][r.video] = -1; //from server
+	user_video_from_where = infos.user_reqs;
+	for (auto& m : user_video_from_where)
+		for (auto& video_where : m)
+			video_where.second = -1; //from server
 
 	cache_load_set.clear();
 	cache_load_set.resize(infos.num_cache);
@@ -37,6 +37,7 @@ double ConnectionStatus::score_changes_if_add_video_to_cache(VideoID video_id, C
 		//t1 = now();
 		if (it != user_video_from_where[user_id].end()) {
 			CacheID old_cache_id = it->second;
+			//Delay delta = infos.user_cache_delay[user_id].at(old_cache_id) - infos.user_cache_delay[user_id].at(cache_id);
 			Delay delta = infos.get_cache_user_delay(old_cache_id, user_id) - infos.get_cache_user_delay(cache_id, user_id);
 			if (delta >= 0) {//added video is closer to user
 				score_change += infos.user_reqs[user_id].at(video_id) * delta;
@@ -46,6 +47,50 @@ double ConnectionStatus::score_changes_if_add_video_to_cache(VideoID video_id, C
 		//cout << "t012=" << timedif(t1, t0) << " " << timedif(t2, t1) << endl;
 	}
 	return score_change * 1000.0 / infos.total_req_count;
+}
+
+double ConnectionStatus::score_changes_if_del_video_from_cache(VideoID video_id, CacheID cache_id)
+{
+	auto& cache_set = cache_load_set[cache_id];
+	auto& video_existance = video_exist_in_cache[video_id];
+
+	if (cache_set.erase(video_id) == 0)
+		throw "error";
+	if (video_existance.erase(cache_id) == 0)
+		throw "error";
+	if ((cache_current_volume[cache_id] -= infos.size_videos[video_id]) < 0)
+		throw "cache volume negative!";
+
+
+	double score_change = 0.0;
+	auto& user_set = cache_video_to_where[cache_id][video_id];
+	for (UserID user_id : user_set) {
+		auto& user_caches_info = infos.user_cache_delay[user_id];
+		set<CacheID> all_cache_connected_to_user;
+		for (auto& it : user_caches_info) all_cache_connected_to_user.insert(it.first);
+		set<CacheID> possible_cache;
+		set_intersection(all_cache_connected_to_user.begin(), all_cache_connected_to_user.end(),
+			video_existance.begin(), video_existance.end(), inserter(possible_cache, possible_cache.begin()));
+		CacheID dest_cache = -1;
+		Delay min_time = infos.get_server_user_delay(user_id);
+		for (CacheID c : possible_cache) {
+			Delay time = infos.get_cache_user_delay(c, user_id);
+			if (time < min_time) {
+				dest_cache = c;
+				min_time = time;
+			}
+		}
+		if (dest_cache != -1)
+			if (!cache_video_to_where[dest_cache][video_id].insert(user_id).second)
+				throw "error";
+
+		score_change += infos.user_reqs[user_id].at(video_id) * (
+			infos.get_cache_user_delay(cache_id, user_id) - min_time
+			);
+		user_video_from_where[user_id][video_id] = dest_cache;
+	}
+	cache_video_to_where[cache_id][video_id].clear();
+	score += score_change * 1000.0 / infos.total_req_count;
 }
 
 void ConnectionStatus::add_video_to_cache(VideoID video_id, CacheID cache_id) {
@@ -96,13 +141,12 @@ void ConnectionStatus::del_video_from_cache(VideoID video_id, CacheID cache_id) 
 	auto& user_set = cache_video_to_where[cache_id][video_id];
 	for (UserID user_id : user_set) {
 		auto& user_caches_info = infos.user_cache_delay[user_id];
-		set<CacheID> all_cache_connected_to_user;
-		for (auto& it : user_caches_info) all_cache_connected_to_user.insert(it.first);
+		const set<CacheID>& all_cache_connected_to_user = infos.user_to_cache[user_id];
 		set<CacheID> possible_cache;
 		set_intersection(all_cache_connected_to_user.begin(), all_cache_connected_to_user.end(),
 			video_existance.begin(), video_existance.end(), inserter(possible_cache, possible_cache.begin()));
 		CacheID dest_cache = -1;
-		Delay min_time = infos.user_cache_delay[user_id].at(-1);
+		Delay min_time = infos.get_server_user_delay(user_id);
 		for (CacheID c : possible_cache) {
 			Delay time = infos.get_cache_user_delay(c, user_id);
 			if (time < min_time) {
@@ -167,7 +211,7 @@ void ConnectionStatus::empty_cache(CacheID cache_id) {
 	}
 }
 
-void ConnectionStatus::stupid_method() {
+void ConnectionStatus::method1_fill_cache() {
 	time_type t0, t1, t2;
 	FOR(c, infos.num_cache) {
 		t0 = now();
@@ -177,12 +221,15 @@ void ConnectionStatus::stupid_method() {
 		cout << "score = " << score << endl;
 	}
 	submission("out.out");
-	FOR(i, 50) {
+	FOR(i, 1) {
 		std::vector<size_t> indices(infos.num_cache);
 		std::iota(begin(indices), end(indices), 0);
 		//shuffle(indices.begin(), indices.end(), random_generator);
 		for (auto c : indices) {
+			t0 = now();
 			empty_cache(c);
+			t1 = now();
+			cout << "del time = " << timedif(t1, t0) << endl;
 			fill_cache_by_best_videos(c);
 			cout << "score = " << score << endl;
 		}
@@ -210,7 +257,7 @@ void ConnectionStatus::update_best_cache(vector<vector<bool>>& video_inserted_to
 		if (!videos_choose_cache[best_cache_id].insert(v).second) throw "impossible";
 }
 
-inline void ConnectionStatus::stupid_method2() {
+inline void ConnectionStatus::method2_take_best_move() {
 	CacheID best_cache_id;
 	VideoID best_video_id;
 	double best_score;
@@ -259,42 +306,6 @@ inline void ConnectionStatus::stupid_method2() {
 		cout << "score " << score << endl;
 		cout << "time: " << timedif(t1, t0) << " " << timedif(t2, t1) << " " << timedif(t3, t2) << endl;
 		counter++;
-	}
-}
-
-void ConnectionStatus::stupid_method3() {
-	CacheID best_cache_id;
-	VideoID best_video_id;
-	double best_score;
-	long long counter = 0;
-	vector<vector<bool>> video_inserted_to_cache(infos.num_video, vector<bool>(infos.num_cache, false));
-
-	while (1) {
-		best_video_id = -1;
-		best_cache_id = -1;
-		double best_score = 0.0;
-		FOR(v, infos.num_video) {
-			FOR(c, infos.num_cache) {
-				if (!video_inserted_to_cache[v][c] && cache_current_volume[c] + infos.size_videos[v] <= infos.size_cache) {
-					double move_score = score_changes_if_add_video_to_cache(v, c);
-					if (move_score > best_score) {
-						best_score = move_score;
-						best_cache_id = c;
-						best_video_id = v;
-					}
-				}
-			}
-		}
-		if (best_cache_id != -1) {
-			add_video_to_cache(best_video_id, best_cache_id);
-			video_inserted_to_cache[best_video_id][best_cache_id] = true;
-			cout << counter << ": video " << best_video_id << " into cache " << best_cache_id << " score " << best_score << endl;
-			cout << "score " << score << endl;
-			counter++;
-		}
-		else {
-			break;
-		}
 	}
 }
 

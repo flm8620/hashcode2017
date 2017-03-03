@@ -54,20 +54,28 @@ void Infos::read_file(string file) {
 	FOR(i, num_video)
 		f >> size_videos[i];
 
+
+	user_cache_delay_matrix.resize(num_user*(num_cache+1));
 	user_cache_delay.resize(num_user);
-	FOR(i, num_user) {
+	user_to_cache.resize(num_user);
+	FOR(u, num_user) {
 		Delay server_delay;        f >> server_delay;
 		long cache_count;           f >> cache_count;
-		auto& dict = user_cache_delay[i];
+		auto& dict = user_cache_delay[u];
 		dict[-1] = server_delay;
-		for (long c = 0; c < cache_count; c++) {
-			CacheID cache_id;
-			f >> cache_id;
+		user_cache_delay_matrix[u * (num_cache + 1)] = server_delay;
+		for (long i = 0; i < cache_count; i++) {
+			CacheID c;
+			f >> c;
 			Delay delay;
 			f >> delay;
-			dict[cache_id] = delay;
+			dict[c] = delay;
+			user_cache_delay_matrix[u * (num_cache + 1) + c + 1] = delay;
+			user_to_cache[u].insert(c);
 		}
 	}
+
+	total_req_count = 0;
 	reqs.resize(num_req);
 	FOR(i, num_req) {
 		f >> reqs[i].video >> reqs[i].user >> reqs[i].number;

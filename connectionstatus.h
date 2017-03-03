@@ -29,6 +29,7 @@ class ConnectionStatus {
 
 
 	double score_changes_if_add_video_to_cache(VideoID video_id, CacheID cache_id);
+	double score_changes_if_del_video_from_cache(VideoID video_id, CacheID cache_id);
 	void update_best_cache(
 		std::vector<std::vector<bool>>& video_inserted_to_cache,
 		std::vector<CacheID>& best_cache_to_insert_for_video,
@@ -52,8 +53,8 @@ public:
 
 	void empty_cache(CacheID cache_id);
 
-	void stupid_method();
-	void stupid_method2();
+	void method1_fill_cache();
+	void method2_take_best_move();
 	void stupid_method3();
 	void submission(std::string outfile);
 	void read_submission(std::string file);

@@ -7,7 +7,7 @@ double Gene::calculate_score(const std::vector<std::set<VideoID>>& cache_load_se
 {
 	double gene_score = 0.0;
 	FOR(u, infos.num_user) {
-		const std::map<VideoID, int>& requests = infos.user_reqs[u];
+		const std::map<VideoID, long>& requests = infos.user_reqs[u];
 		size_t video_count = requests.size();
 		Delay server_delay = infos.user_cache_delay[u].at(-1);
 		vector<long> nearest_cache(video_count, -1);
@@ -66,6 +66,11 @@ double Gene::get_score()
 	return score;
 }
 
+void Gene::recalculate_score()
+{
+	score = calculate_score(cache_load_set, infos);
+}
+
 Gene::ptr Gene::cross(const Gene & other, std::default_random_engine & random_generator)
 {
 	std::vector<std::set<VideoID>> new_cache_load_set;
@@ -80,7 +85,7 @@ Gene::ptr Gene::cross(const Gene & other, std::default_random_engine & random_ge
 		for (VideoID v : loads_vec) {
 			if (weight + infos.size_videos[v] <= infos.size_cache) {
 				weight += infos.size_videos[v];
-				new_cache_load_set[v].insert(v);
+				new_cache_load_set[c].insert(v);
 			}
 		}
 	}
@@ -90,6 +95,19 @@ Gene::ptr Gene::cross(const Gene & other, std::default_random_engine & random_ge
 std::vector<std::set<VideoID>> Gene::get_cache_load_set()
 {
 	return cache_load_set;
+}
+
+double Gene::loading_percentage()
+{
+	int sum = 0;
+	for (auto& s : cache_load_set) {
+		for (VideoID v : s) {
+			sum += infos.size_videos[v];
+		}
+	}
+	double p = double(sum) / cache_load_set.size();
+	p /= infos.size_cache;
+	return p;
 }
 
 Gene::~Gene()
