@@ -222,7 +222,7 @@ void ConnectionStatus::method1_fill_cache(const std::vector<size_t>& order) {
 	//cout << " time = " << timedif(t1, t0) / 1000.0 << " msecs" << endl;
 	//cout << "score = " << score << endl;
 	//submission("out.out");
-	FOR(i, 0) {
+	FOR(i, 3) {
 		//std::vector<size_t> indices(infos.num_cache);
 		//std::iota(begin(indices), end(indices), 0);
 		//shuffle(indices.begin(), indices.end(), random_generator);
@@ -232,9 +232,9 @@ void ConnectionStatus::method1_fill_cache(const std::vector<size_t>& order) {
 			fill_cache_by_best_videos(c);
 		}
 		t1 = now();
-		cout << "del time = " << timedif(t1, t0) / 1000.0 << " msecs" << endl;
-		cout << "score = " << score << endl;
-		submission("out.out");
+		//cout << "del time = " << timedif(t1, t0) / 1000.0 << " msecs" << endl;
+		//cout << "score = " << score << endl;
+		//submission("out.out");
 	}
 }
 
