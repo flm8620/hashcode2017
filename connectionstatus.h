@@ -53,8 +53,9 @@ public:
 
 	void empty_cache(CacheID cache_id);
 
-	void method1_fill_cache();
+	void method1_fill_cache(const std::vector<size_t>& order = std::vector<size_t>());
 	void method2_take_best_move();
+	void method3_fill_all_then_delete();
 	void stupid_method3();
 	void submission(std::string outfile);
 	void read_submission(std::string file);
