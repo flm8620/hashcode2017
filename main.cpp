@@ -27,17 +27,17 @@ std::default_random_engine random_generator(224469);
 
 long main() {
 	//string file = "trending_today.in";
-	string file = "me_at_the_zoo.in";
-	//string file = "videos_worth_spreading.in";
+	//string file = "me_at_the_zoo.in";
+	string file = "videos_worth_spreading.in";
 	//string file = "kittens.in";
 	cout << "Build infos..." << endl;
 	Infos infos(file);
 	cout << infos.num_cache << " caches, " << infos.num_user << " users, " << infos.num_video << " videos" << endl;
 	time_type t0, t1;
+	
+	cout << "Starting genetic algo..." << endl;
+	auto genes = genetic_algo(infos, random_generator, 10, 10, 100, 0.3);
 	cout << "Build ConnectionStatus..." << endl;
-
-	auto genes = genetic_algo(infos, random_generator, 10, 20, 100, 0.3);
-
 	ConnectionStatus cs(infos);
 	cout << "Starting method..." << endl;
 	t0 = now();

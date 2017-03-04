@@ -93,24 +93,64 @@ static void print_scores(const vector<OrderGene::ptr>& genes) {
 		cout << g->get_id() << "\t" << g->get_score() << endl;
 	}
 }
-vector<OrderGene::ptr> genetic_algo(const Infos& infos, std::default_random_engine & random_generator, int num_genes, int num_growth, int num_generations, double mutate_proba)
+static void write_file(const vector<OrderGene::ptr>& genes, string filename) {
+	ofstream f(filename);
+	f << genes.size() << " " << genes[0]->get_order_ref().size() << endl;
+	for (auto& g : genes) {
+		const auto& order = g->get_order_ref();
+		for (size_t i : order)
+			f << i << " ";
+		f << endl;
+	}
+
+	f.close();
+}
+static void read_file(vector<OrderGene::ptr>& genes, string filename, const Infos& infos) {
+	genes.clear();
+	ifstream f(filename);
+	if (!f.good()) throw "file error";
+	int num_gene, num_cache;
+	f >> num_gene >> num_cache;
+	FOR(i, num_gene) {
+		std::vector<size_t> order(num_cache);
+		for (auto& o : order)
+			f >> o;
+		auto g = make_shared<OrderGene>(infos, order);
+		genes.push_back(g);
+	}
+	f.close();
+}
+vector<OrderGene::ptr> genetic_algo(const Infos& infos, std::default_random_engine & random_generator, int num_genes, int num_growth, int num_generations, double mutate_proba, string initial_file)
 {
 
 	vector<OrderGene::ptr> genes(num_genes, nullptr);
-	for (auto& g : genes) {
-		g = make_shared<OrderGene>(infos, random_generator);
-	}
 	auto sort_fun = [](const OrderGene::ptr& a, const OrderGene::ptr& b)->bool {
 		return a->get_score() > b->get_score();
 	};
 
-	sort(begin(genes), end(genes), sort_fun);
-	cout << "Initialization:" << endl;
+
+	if (initial_file.size() > 0) {
+		cout << "Reading from file " << initial_file << endl;
+		read_file(genes, initial_file, infos);
+		if (genes.size() != num_genes) throw "file_wrong";
+	}
+	else {
+		cout << "Initialing..." << endl;
+		for (auto& g : genes) {
+			cout << "." << flush;
+			g = make_shared<OrderGene>(infos, random_generator);
+		}
+		cout << endl;
+		sort(begin(genes), end(genes), sort_fun);
+	}
+	cout << "Initialization score:" << endl;
 	print_scores(genes);
 	uniform_int_distribution<int> distri(0, num_genes - 1);
 	uniform_real_distribution<double> proba(0, 1);
 	FOR(i, num_generations) {
+		cout << "Generation " << i << endl;
 		//vector<OrderGene::ptr> children(num_growth, nullptr);
+		cout << "crossing over" << flush;
 		FOR(j, num_growth) {
 			int a = distri(random_generator);
 			int b;
@@ -122,11 +162,18 @@ vector<OrderGene::ptr> genetic_algo(const Infos& infos, std::default_random_engi
 				child->mutate(random_generator, 5);
 			}
 			genes.push_back(child);
+			cout << "." << flush;
 		}
+		cout << endl;
 		sort(begin(genes), end(genes), sort_fun);
 		genes.resize(num_genes);
 		cout << "Generation " << i << " :" << endl;
 		print_scores(genes);
+
+		long timestamp = chrono::duration_cast<chrono::seconds>(now().time_since_epoch()).count();
+		string fullname = string("order_file_") + to_string(timestamp) + string("_gen_") + to_string(i) + string(".order");
+		cout << "Save to file " << fullname << endl;
+		write_file(genes, fullname);
 	}
 	return genes;
 }

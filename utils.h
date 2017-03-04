@@ -23,3 +23,4 @@ std::vector<std::size_t> sort_index_large_to_small(std::vector<T> const& values)
 	);
 	return indices;
 }
+

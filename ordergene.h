@@ -33,7 +33,8 @@ public:
 	double get_score()const { return score; }
 	int get_id()const { return id; }
 	std::vector<size_t> get_order() { return order; }
+	const std::vector<size_t>& get_order_ref() { return order; }
 	~OrderGene();
 };
 
-std::vector<OrderGene::ptr> genetic_algo(const Infos& infos, std::default_random_engine & random_generator, int num_genes, int num_growth, int num_generations, double mutate_proba);
+std::vector<OrderGene::ptr> genetic_algo(const Infos& infos, std::default_random_engine & random_generator, int num_genes, int num_growth, int num_generations, double mutate_proba, std::string initial_file = std::string(""));
