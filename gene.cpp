@@ -55,10 +55,10 @@ Gene::Gene(std::vector<std::set<VideoID>> cache_load_set, const Infos & infos) :
 	score = calculate_score(cache_load_set, infos);
 }
 
-Gene::ptr Gene::generate_one(std::default_random_engine & random_generator, const Infos& infos)
+Gene::ptr Gene::generate_one(const Infos& infos)
 {
 	ConnectionStatus cs(infos);
-	return cs.generate_gene(random_generator);
+	return cs.generate_gene();
 }
 
 double Gene::get_score()
@@ -71,7 +71,7 @@ void Gene::recalculate_score()
 	score = calculate_score(cache_load_set, infos);
 }
 
-Gene::ptr Gene::cross(const Gene & other, std::default_random_engine & random_generator)
+Gene::ptr Gene::cross(const Gene & other)
 {
 	std::vector<std::set<VideoID>> new_cache_load_set;
 	new_cache_load_set.resize(infos.num_cache);

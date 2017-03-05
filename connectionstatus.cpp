@@ -1,4 +1,6 @@
 #include "connectionstatus.h"
+#include "knapsack.h"
+#include <sstream>
 using namespace std;
 ConnectionStatus::ConnectionStatus(const Infos & infos) : infos(infos) {
 	init_all();
@@ -28,9 +30,9 @@ void ConnectionStatus::init_all()
 	score = 0.0;
 }
 
-double ConnectionStatus::score_changes_if_add_video_to_cache(VideoID video_id, CacheID cache_id) {
+long long ConnectionStatus::score_changes_if_add_video_to_cache(VideoID video_id, CacheID cache_id) {
 	//time_type t0, t1, t2, t3, t4;
-	double score_change = 0.0;
+	long long score_change = 0;
 	for (UserID user_id : infos.cache_video_to_possible_user[cache_id][video_id]) {
 		//t0 = now();
 		auto it = user_video_from_where[user_id].find(video_id);
@@ -46,7 +48,7 @@ double ConnectionStatus::score_changes_if_add_video_to_cache(VideoID video_id, C
 		//t2 = now();
 		//cout << "t012=" << timedif(t1, t0) << " " << timedif(t2, t1) << endl;
 	}
-	return score_change * 1000.0 / infos.total_req_count;
+	return score_change;
 }
 
 double ConnectionStatus::score_changes_if_del_video_from_cache(VideoID video_id, CacheID cache_id)
@@ -85,7 +87,7 @@ double ConnectionStatus::score_changes_if_del_video_from_cache(VideoID video_id,
 	return score_change * 1000.0 / infos.total_req_count;
 }
 
-void ConnectionStatus::add_video_to_cache(VideoID video_id, CacheID cache_id) {
+void ConnectionStatus::add_video_to_cache(VideoID video_id, CacheID cache_id, std::set<CacheID> *touched_caches) {
 	auto& cache_set = cache_load_set[cache_id];
 	auto& video_existance = video_exist_in_cache[video_id];
 	if (!cache_set.insert(video_id).second)
@@ -96,6 +98,9 @@ void ConnectionStatus::add_video_to_cache(VideoID video_id, CacheID cache_id) {
 	//if ((cache_current_volume[cache_id] += infos.size_videos[video_id]) > infos.size_cache)
 	//	throw "cache is full";
 
+	bool record_touched_caches = false;
+	if (touched_caches)
+		record_touched_caches = true;
 
 	double score_change = 0.0;
 	for (UserID user_id : infos.cache_video_to_possible_user[cache_id][video_id]) {
@@ -108,8 +113,11 @@ void ConnectionStatus::add_video_to_cache(VideoID video_id, CacheID cache_id) {
 				if (!cache_video_to_where[cache_id][video_id].insert(user_id).second)
 					throw "error";
 				//break old connection
-				if (old_cache_id != -1)
+				if (old_cache_id != -1) {
 					cache_video_to_where[old_cache_id][video_id].erase(user_id);
+					if (record_touched_caches)
+						(*touched_caches).insert(old_cache_id);
+				}
 				score_change += infos.user_reqs[user_id].at(video_id) * delta;
 				user_video_from_where[user_id][video_id] = cache_id;
 			}
@@ -159,26 +167,67 @@ void ConnectionStatus::del_video_from_cache(VideoID video_id, CacheID cache_id) 
 	score += score_change * 1000.0 / infos.total_req_count;
 }
 
-void ConnectionStatus::fill_cache_by_best_videos(CacheID cache_id) {
+void ConnectionStatus::fill_cache_by_best_videos(CacheID cache_id, int size_limit, std::set<CacheID> *touched_caches) {
+	if (size_limit == 0)size_limit = infos.size_cache;
 	time_type t0, t1, t2, t3;
 	const vector<VideoID>& video_list = infos.cache_may_have_video[cache_id];
-	vector<double> video_score(video_list.size(), 0.0);
+	vector<double> video_value(video_list.size(), 0.0);
 	//cout << "c=" << cache_id << " may have video = " << video_list.size() << endl;
 	t0 = now();
 	FOR(i, video_list.size()) {
 		VideoID v = video_list[i];
-		double score_change = score_changes_if_add_video_to_cache(v, cache_id);
-		video_score[i] = score_change / infos.size_videos[v];
+		double score_change = score_changes_if_add_video_to_cache(v, cache_id) * 1000.0 / infos.total_req_count;
+		video_value[i] = score_change;
 	}
-	std::vector<size_t> indices = sort_index_large_to_small(video_score);
+	std::vector<size_t> indices = sort_index_large_to_small(video_value);
+
+
 	long insert_count = 0;
-	for (auto index : indices) {
+	for (int index : indices) {
 		VideoID v_id = video_list[index];
-		if (video_score[index] == 0) break;
-		long rest_volume = infos.size_cache - cache_current_volume[cache_id];
+		if (video_value[index] == 0.0) break;
+		long rest_volume = size_limit - cache_current_volume[cache_id];
 		if (infos.size_videos[v_id] <= rest_volume) {
-			add_video_to_cache(v_id, cache_id);
+			add_video_to_cache(v_id, cache_id, touched_caches);
 			insert_count += 1;
+		}
+	}
+	//cout << "inserted video:" << insert_count << endl;
+	//cout << "rest_volume: " << infos.size_cache - cache_current_volume[cache_id] << endl;
+}
+
+void ConnectionStatus::fill_cache_by_best_videos_knapsack(CacheID cache_id, int size_limit, std::set<CacheID>* touched_caches)
+{
+	if (size_limit == 0)size_limit = infos.size_cache;
+	time_type t0, t1, t2, t3;
+	const vector<VideoID>& video_list = infos.cache_may_have_video[cache_id];
+	vector<long long> video_value(video_list.size());
+	//cout << "c=" << cache_id << " may have video = " << video_list.size() << endl;
+	t0 = now();
+	FOR(i, video_list.size()) {
+		VideoID v = video_list[i];
+		long long score_change = score_changes_if_add_video_to_cache(v, cache_id);
+		video_value[i] = score_change;
+	}
+	//std::vector<size_t> indices = sort_index_large_to_small(video_value);
+
+	vector<int> video_weight(video_list.size());
+	FOR(i, video_list.size()) {
+		video_weight[i] = infos.size_videos[video_list[i]];
+	}
+	set<int> solutions;
+	knapsack(video_list.size(), infos.size_cache, video_weight, video_value, solutions);
+
+	long insert_count = 0;
+	for (int index : solutions) {
+		VideoID v_id = video_list[index];
+		long rest_volume = size_limit - cache_current_volume[cache_id];
+		if (infos.size_videos[v_id] <= rest_volume) {
+			add_video_to_cache(v_id, cache_id, touched_caches);
+			insert_count += 1;
+		}
+		else {
+			throw "error";
 		}
 	}
 	//cout << "inserted video:" << insert_count << endl;
@@ -203,7 +252,7 @@ void ConnectionStatus::empty_cache(CacheID cache_id) {
 	}
 }
 
-void ConnectionStatus::method1_fill_cache(const std::vector<size_t>& order) {
+void ConnectionStatus::method1_fill_cache(const std::vector<size_t>& order, int refill_times, bool verbose) {
 	time_type t0, t1, t2;
 	std::vector<size_t> cache_order;
 	if (order.empty()) {
@@ -212,30 +261,62 @@ void ConnectionStatus::method1_fill_cache(const std::vector<size_t>& order) {
 	else {
 		cache_order = order;
 	}
-	t0 = now();
-	for(CacheID c : cache_order) {
-		fill_cache_by_best_videos(c);
-		//cout << "c=" << c << " t=" << timedif(t1, t0) / 1000 << "microsecs" << endl;
-		//cout << "score = " << score << endl;
-	}
-	t1 = now();
-	//cout << " time = " << timedif(t1, t0) / 1000.0 << " msecs" << endl;
-	//cout << "score = " << score << endl;
 	//submission("out.out");
-	FOR(i, 3) {
-		//std::vector<size_t> indices(infos.num_cache);
-		//std::iota(begin(indices), end(indices), 0);
-		//shuffle(indices.begin(), indices.end(), random_generator);
+	FOR(i, refill_times + 1) {
 		t0 = now();
 		for (auto c : cache_order) {
 			empty_cache(c);
-			fill_cache_by_best_videos(c);
+			fill_cache_by_best_videos_knapsack(c);
 		}
 		t1 = now();
-		//cout << "del time = " << timedif(t1, t0) / 1000.0 << " msecs" << endl;
-		//cout << "score = " << score << endl;
+		if (verbose)
+			cout << "time = " << timedif(t1, t0) / 1000.0 << " msecs" << endl << "score = " << score << endl;
 		//submission("out.out");
 	}
+}
+
+void ConnectionStatus::method5_following_touched_caches(int follow_times, bool verbose)
+{
+	time_type t0, t1, t2;
+
+	set<CacheID> touched_caches;
+	CacheID next = -1;
+	CacheID start;
+	uniform_int_distribution<int> distri(0, infos.num_cache - 1);
+	uniform_real_distribution<double> proba(0, 1);
+	cout << "start following..." << endl;
+	FOR(i, follow_times) {
+		if (i != 0 && i % 500 == 0) {
+			cout << "submission" << endl;
+			submission(string("follow_") + timestamp() + " " + to_string(i) + ".out");
+		}
+		if (next == -1 || proba(random_generator) < 0.01) {
+			start = distri(random_generator);
+			cout << "######## new start ##########: \t" << start << endl;
+		}
+		else {
+			start = next;
+		}
+		cout << "filling\t\t" << start << endl;
+		empty_cache(start);
+		touched_caches.clear();
+		fill_cache_by_best_videos_knapsack(start, 0, &touched_caches);
+
+		//random element
+		if (!touched_caches.empty()) {
+			cout << touched_caches.size() << "caches touched" << endl;
+			uniform_int_distribution<int> distri2(0, touched_caches.size() - 1);
+			int rand_pos = distri2(random_generator);
+			auto it = touched_caches.begin();
+			advance(it, rand_pos);
+			next = *it;
+		}
+		else {
+			next = -1;
+		}
+		cout << "score = \t\t" << score << "\t" << i << endl;
+	}
+
 }
 
 void ConnectionStatus::update_best_cache(vector<vector<bool>>& video_inserted_to_cache, vector<CacheID>& best_cache_to_insert_for_video, vector<double>& score_for_best_cache_to_insert_for_video, vector<set<VideoID>>& videos_choose_cache, VideoID v) {
@@ -246,7 +327,7 @@ void ConnectionStatus::update_best_cache(vector<vector<bool>>& video_inserted_to
 	}
 	FOR(c, infos.num_cache) {
 		if (!video_inserted_to_cache[v][c] && cache_current_volume[c] + infos.size_videos[v] <= infos.size_cache) {
-			double move_score = score_changes_if_add_video_to_cache(v, c);
+			double move_score = score_changes_if_add_video_to_cache(v, c) * 1000.0 / infos.total_req_count;
 			if (move_score > 0 && move_score > best_score) {
 				best_score = move_score; best_cache_id = c;
 			}
@@ -256,6 +337,36 @@ void ConnectionStatus::update_best_cache(vector<vector<bool>>& video_inserted_to
 	score_for_best_cache_to_insert_for_video[v] = best_score;
 	if (best_cache_id != -1)
 		if (!videos_choose_cache[best_cache_id].insert(v).second) throw "impossible";
+}
+
+void ConnectionStatus::method4_fill_cache_gradually(const std::vector<size_t>& order, int refill_times, int repeat_time, bool verbose)
+{
+	time_type t0, t1, t2;
+	std::vector<size_t> cache_order;
+	if (order.empty()) {
+		cache_order = python_range(infos.num_cache);
+	}
+	else {
+		cache_order = order;
+	}
+	FOR(i, refill_times + 1) {
+		FOR(r, repeat_time) {
+			t0 = now();
+			int size_limit = infos.size_cache * (double(i + 1) / (refill_times + 1));
+			for (auto c : cache_order) {
+				empty_cache(c);
+				fill_cache_by_best_videos_knapsack(c, size_limit);
+			}
+			t1 = now();
+			if (verbose) {
+				cout << "time = " << timedif(t1, t0) / 1000.0 << " msecs" << endl;
+				cout << "score = " << score << endl;
+				cout << "size limit = " << size_limit << endl;
+
+			}
+			//submission("out.out");
+		}
+	}
 }
 
 inline void ConnectionStatus::method2_take_best_move() {
@@ -381,24 +492,37 @@ void ConnectionStatus::submission(string outfile) {
 
 void ConnectionStatus::read_submission(string file) {
 	ifstream f(file);
+	cout << "reading file" << endl;
+	std::string line;
+	std::getline(f, line);
+	std::istringstream iss(line);
 	int num_cache_from_file;
-	f >> num_cache_from_file;
+	iss >> num_cache_from_file;
 	if (num_cache_from_file != infos.num_cache) throw "error";
 	FOR(i, infos.num_cache) {
-		int video;
-		f >> video;
-		add_video_to_cache(video, i);
+		std::getline(f, line);
+		std::istringstream ss(line);
+		int cache_num;
+		ss >> cache_num;
+		if (cache_num != i) throw "error";
+		do {
+			int video;
+			ss >> video;
+			if (!ss.good()) break;
+			add_video_to_cache(video, i);
+		} while (1);
+
 	}
 	f.close();
 }
 
-Gene::ptr ConnectionStatus::generate_gene(std::default_random_engine & random_generator)
+Gene::ptr ConnectionStatus::generate_gene()
 {
 	init_all();
 	auto indices = python_range(infos.num_cache);
 	shuffle(indices.begin(), indices.end(), random_generator);
 	for (auto c : indices) {
-		fill_cache_by_best_videos(c);
+		fill_cache_by_best_videos_knapsack(c);
 	}
 	return make_shared<Gene>(this->cache_load_set, this->score, infos);
 }

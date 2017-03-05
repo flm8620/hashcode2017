@@ -29,10 +29,10 @@ public:
 	typedef std::shared_ptr<Gene> ptr;
 	Gene(std::vector<std::set<VideoID>> cache_load_set, double score, const Infos& infos);
 	Gene(std::vector<std::set<VideoID>> cache_load_set, const Infos& infos);
-	static Gene::ptr generate_one(std::default_random_engine& random_generator, const Infos& infos);
+	static Gene::ptr generate_one(const Infos& infos);
 	double get_score();
 	void recalculate_score();
-	Gene::ptr cross(const Gene& other, std::default_random_engine & random_generator);
+	Gene::ptr cross(const Gene& other);
 	std::vector<std::set<VideoID>> get_cache_load_set();
 	double loading_percentage();
 	virtual ~Gene();

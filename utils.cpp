@@ -2,6 +2,7 @@
 #include <iostream>
 using namespace std;
 static time_type start_time;
+std::default_random_engine random_generator = std::default_random_engine(565765154);
 decltype(&std::chrono::high_resolution_clock::now) now = std::chrono::high_resolution_clock::now;
 
 void tic() {
@@ -23,4 +24,10 @@ std::vector<size_t> python_range(size_t num) {
 	std::vector<size_t> indices(num);
 	std::iota(begin(indices), end(indices), 0);
 	return indices;
+}
+
+std::string timestamp()
+{
+	long timestamp = chrono::duration_cast<chrono::seconds>(now().time_since_epoch()).count();
+	return to_string(timestamp);
 }

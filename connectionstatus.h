@@ -28,7 +28,7 @@ class ConnectionStatus {
 	std::vector<int> cache_current_volume;
 
 
-	double score_changes_if_add_video_to_cache(VideoID video_id, CacheID cache_id);
+	long long score_changes_if_add_video_to_cache(VideoID video_id, CacheID cache_id);
 	double score_changes_if_del_video_from_cache(VideoID video_id, CacheID cache_id);
 	void update_best_cache(
 		std::vector<std::vector<bool>>& video_inserted_to_cache,
@@ -37,28 +37,31 @@ class ConnectionStatus {
 		std::vector<std::set<VideoID>>& videos_choose_cache,
 		VideoID v);
 public:
-	
+
 	double score;
 	ConnectionStatus(const Infos& infos);
 
 	void init_all();
 
-	void add_video_to_cache(VideoID video_id, CacheID cache_id);
+	void add_video_to_cache(VideoID video_id, CacheID cache_id, std::set<CacheID> *touched_caches = nullptr);
 
 	void del_video_from_cache(VideoID video_id, CacheID cache_id);
 
-	void fill_cache_by_best_videos(CacheID cache_id);
+	void fill_cache_by_best_videos(CacheID cache_id, int size_limit = 0, std::set<CacheID> *touched_caches = nullptr);
+	void fill_cache_by_best_videos_knapsack(CacheID cache_id, int size_limit = 0, std::set<CacheID> *touched_caches = nullptr);
 
 	double calculate_score();
 
 	void empty_cache(CacheID cache_id);
 
-	void method1_fill_cache(const std::vector<size_t>& order = std::vector<size_t>());
+	void method1_fill_cache(const std::vector<size_t>& order = std::vector<size_t>(), int refill_times = 0, bool verbose = false);
+	void method5_following_touched_caches(int follow_times = 10000, bool verbose = false);
+	void method4_fill_cache_gradually(const std::vector<size_t>& order = std::vector<size_t>(), int refill_times = 0, int repeat_time = 1, bool verbose = false);
 	void method2_take_best_move();
 	void method3_fill_all_then_delete();
 	void stupid_method3();
 	void submission(std::string outfile);
 	void read_submission(std::string file);
-	Gene::ptr generate_gene(std::default_random_engine& random_generator);
+	Gene::ptr generate_gene();
 
 };

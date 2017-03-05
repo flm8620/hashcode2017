@@ -4,10 +4,11 @@
 #include <algorithm>
 #include <vector>
 #include <numeric>
+#include <random>
 #define FOR(i,N) for(long i=0;i<N;i++)
 typedef decltype(std::chrono::high_resolution_clock::now()) time_type;
 extern decltype(&std::chrono::high_resolution_clock::now) now;
-
+extern std::default_random_engine random_generator;
 void tic();
 void toc(std::string event);
 long timedif(time_type t1, time_type t2);
@@ -24,3 +25,4 @@ std::vector<std::size_t> sort_index_large_to_small(std::vector<T> const& values)
 	return indices;
 }
 
+std::string timestamp();
